@@ -1,0 +1,26 @@
+{
+  "meta": {
+    "title": "Realtime Voice",
+    "description": "Tap to talk: transcribe locally, prompt the current Session, and stream the reply back through a local Qwen3-TTS server."
+  },
+  "toggle": "Realtime voice",
+  "start": "Start talking",
+  "stop": "End conversation",
+  "interrupt": "Interrupt",
+  "settings": "Settings",
+  "close": "Close",
+  "idle": "Tap to start. Pause after speaking to send.",
+  "listening": "Listening…",
+  "transcribing": "Transcribing…",
+  "thinking": "Thinking…",
+  "speaking": "Speaking…",
+  "service": "TTS endpoint",
+  "voice": "Voice",
+  "language": "Language",
+  "save": "Save",
+  "saved": "Saved",
+  "hint": "Start tools/tts_server.py locally before talking.",
+  "noSpeech": "Speech recognition is unavailable: enable the voice input bundle (SenseVoice) first.",
+  "noTts": "Cannot reach the TTS endpoint. Check the URL and that tools/tts_server.py is running.",
+  "empty": "Didn't catch that. Try again."
+}

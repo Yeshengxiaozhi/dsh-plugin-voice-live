@@ -1,0 +1,16 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Local model / package caches (multi-GB)
+.hf-cache/
+.uv-cache/
+.uv-python/
+
+# Local logs
+*.log
+
+# macOS
+.DS_Store

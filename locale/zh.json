@@ -1,0 +1,26 @@
+{
+  "meta": {
+    "title": "实时语音对话",
+    "description": "按住说话，自动转写并发送给当前会话；回复按句流式合成并播放。"
+  },
+  "toggle": "实时语音对话",
+  "start": "开始对话",
+  "stop": "结束对话",
+  "interrupt": "打断",
+  "settings": "设置",
+  "close": "关闭",
+  "idle": "点一下开始，说话后停顿会自动发送",
+  "listening": "在听…",
+  "transcribing": "识别中…",
+  "thinking": "思考中…",
+  "speaking": "正在说…",
+  "service": "TTS 服务地址",
+  "voice": "音色",
+  "language": "语言",
+  "save": "保存",
+  "saved": "已保存",
+  "hint": "先在本机运行 tools/tts_server.py，再开始对话。",
+  "noSpeech": "语音识别服务不可用：请先在插件页启用语音输入（SenseVoice）。",
+  "noTts": "连不上 TTS 服务，检查地址和 tools/tts_server.py 是否在运行。",
+  "empty": "没有听清，再说一次。"
+}
