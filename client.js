@@ -1,5 +1,5 @@
 window.__ModuleLoader__.load({
-  id: '@local/voice-live',
+  id: 'dsh-plugin-voice-live',
   factory(require) {
     const React = require('react');
     const h = React.createElement;

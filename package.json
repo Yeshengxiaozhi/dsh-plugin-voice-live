@@ -1,5 +1,5 @@
 {
-  "name": "@local/voice-live",
+  "name": "dsh-plugin-voice-live",
   "version": "0.1.0",
   "private": true,
   "type": "module",

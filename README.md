@@ -1,7 +1,10 @@
-# voice-live
+# dsh-plugin-voice-live
 
 给 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web UI 用的**实时语音对话插件**：
 点一下麦克风，说话，自动识别、自动发送、自动朗读回复；你随时可以打断。
+
+> 包名遵循 `dsh-plugin-*` 前缀，和社区里 `dsh-plugin-whale-pet` 这类插件一致；
+> 浏览器产物注册的模块 id、bundle 清单和 patch 入口都用同一个名字。
 
 ```
 🎙 麦克风 → 能量 VAD → 16k WAV → 宿主 SenseVoice 识别
@@ -34,7 +37,7 @@ Host 半是空实现——不新增端口、不新增鉴权面。
 ## 安装
 
 ```bash
-git clone <this repo> voice-live && cd voice-live
+git clone <this repo> dsh-plugin-voice-live && cd dsh-plugin-voice-live
 
 # 1. 推理环境
 python3 -m venv .venv && source .venv/bin/activate
@@ -92,7 +95,7 @@ RTF < 1 才谈得上实时。PyTorch 的 MPS 后端在 M4 上慢于实时，结�
 ## 目录
 
 ```
-voice-live/
+dsh-plugin-voice-live/
 ├── package.json          # bundle 清单：dsh.bundle.patch + dsh.client
 ├── cordis.patch.yml      # 往 profile 里插入一个 Loader 入口
 ├── index.js              # Host 半（空实现，说明见注释）
