@@ -8,6 +8,7 @@ __pycache__/
 .hf-cache/
 .uv-cache/
 .uv-python/
+.pip-cache/
 
 # Local logs
 *.log
