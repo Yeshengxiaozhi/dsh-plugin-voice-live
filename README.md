@@ -7,7 +7,7 @@
 > 浏览器产物注册的模块 id、bundle 清单和 patch 入口都用同一个名字。
 
 ```
-🎙 麦克风 → 能量 VAD → 16k WAV → 宿主 SenseVoice 识别
+🎙 麦克风 → 高通 + 能量 VAD → 16k WAV → 本地 Qwen3-ASR (MLX)
                                         ↓
                               session.prompt（当前会话）
                                         ↓
@@ -16,8 +16,8 @@
                       Qwen3-TTS（本地 MLX，OpenAI 兼容接口）
 ```
 
-整条链路跑在浏览器里，复用 Harness 已有的 `sessions` 和 `remote.speech` 服务，
-Host 半是空实现——不新增端口、不新增鉴权面。
+除两个本地推理服务（识别、合成）之外，整条链路跑在浏览器里，复用 Harness 已有的
+`sessions` 服务，Host 半是空实现。插件不依赖 Harness 的语音识别 bundle。
 
 ## 能力
 
@@ -29,10 +29,11 @@ Host 半是空实现——不新增端口、不新增鉴权面。
 
 ## 前置条件
 
-1. **Harness profile** 需要启用 `@deepseek-ai/dsh-experimental-voice-input-bundle`
-   ——它挂载 `remote.speech` 这个 namespace，没有它本插件不会激活
-2. **Apple Silicon Mac**（M1–M4），Python 3.10+
-3. 首次运行会下载约 1.2 GB 模型权重
+1. **Apple Silicon Mac**（M1–M4），Python 3.10+
+2. 首次运行会下载约 1.8 GB 权重（TTS 1.2 GB + ASR 0.6 GB）
+3. 需要两个本地服务：识别（8031）和合成（8020）
+
+> 不需要 Harness 的 `voice-input` bundle：识别走本仓库自己的 `tools/asr_server.py`。
 
 ## 安装
 
@@ -43,7 +44,8 @@ git clone <this repo> dsh-plugin-voice-live && cd dsh-plugin-voice-live
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r tools/requirements.txt
 
-# 2. 启动本地 TTS（后台或另开终端）
+# 2. 启动两个本地服务（后台或另开两个终端）
+python3 tools/asr_server.py --port 8031
 python3 tools/tts_server.py --backend mlx \
   --model mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-bf16
 
@@ -56,6 +58,19 @@ python3 tools/tts_server.py --backend mlx \
 > 输入框工具条里还有一个麦克风，那是 Harness 官方的**听写**：只把文字塞进草稿、不发送、不朗读。
 > 蓝色胶囊才是对话。
 
+## 识别质量
+
+识别引擎是 Qwen3-ASR 0.6B（8bit），比 Harness 自带的 SenseVoice 更适合中文长句，
+也不会乱加句号。用「TTS 合成 → 喂给识别 → 比对原文」的方式自测：
+
+| 原文 | 识别结果 |
+|---|---|
+| 今天下午三点我们开个会，讨论一下自媒体账号的选题。 | 今天下午三点**，**我们开个会，讨论一下自媒体账号的选题。 |
+| 这个月的预算是两万三千五百块，超支了百分之十二。 | 完全一致 |
+| 帮我把论文的第三章重写一下，重点是实验部分。 | 完全一致 |
+
+数字和标点都稳。识别耗时约 0.25 秒 / 4 秒音频（RTF 0.06）。
+
 ## 服务参数
 
 | 参数 | 默认 | 说明 |
@@ -65,7 +80,7 @@ python3 tools/tts_server.py --backend mlx \
 | `--temperature` | `0.55` | 采样温度，越低音色越稳（模型默认 0.9） |
 | `--stream-audio` | 关 | 分段解码，首声更快但每段之间有接缝 |
 | `--streaming-interval` | `0.5` | 配合 `--stream-audio`，每段秒数 |
-| `--port` | `8020` | 改了要在插件设置里同步 |
+| `--port` | `8020`（TTS）/ `8031`（ASR） | 改了要在插件设置里同步 |
 | `--dry-run` | 关 | 不加载模型，返回测试音 |
 
 音色：`Vivian` `Serena` `Uncle_Fu` `Dylan` `Eric` `Ryan` `Aiden` `Ono_Anna` `Sohee`。

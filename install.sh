@@ -15,6 +15,7 @@ cd "$HERE"
 
 MODEL="${MODEL:-mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-bf16}"
 PORT="${PORT:-8020}"
+ASR_PORT="${ASR_PORT:-8031}"
 RUN=0
 
 while [[ $# -gt 0 ]]; do
@@ -85,6 +86,8 @@ if [[ "$RUN" == "1" ]]; then
     echo "error: port $PORT is already in use; stop that process or pass --port" >&2
     exit 1
   fi
+  echo "==> starting ASR server on 127.0.0.1:$ASR_PORT (log: asr.log)"
+  nohup .venv/bin/python tools/asr_server.py --port "$ASR_PORT" > asr.log 2>&1 &
   echo "==> starting TTS server on 127.0.0.1:$PORT (log: tts.log)"
   nohup .venv/bin/python tools/tts_server.py --backend mlx --model "$MODEL" --port "$PORT" \
     > tts.log 2>&1 &
@@ -105,7 +108,7 @@ Next:
   1. In Harness, open Settings -> Plugins and install this folder as a bundle:
      $HERE
      (the agent can also run: plugin_manager install_bundle $HERE)
-  2. Make sure the "voice input" bundle is enabled — it provides remote.speech.
-  3. Refresh the Harness page and click the blue "Voice" pill under the composer.
+  2. Refresh the Harness page and click the blue "Voice" pill under the composer.
+     Settings in that panel let you point at a different TTS/ASR address.
 
 EOF

@@ -7,6 +7,7 @@ window.__ModuleLoader__.load({
     const STORE_KEY = 'dsh.voice-live.settings.v2';
     const DEFAULT_SETTINGS = {
       url: 'http://127.0.0.1:8020',
+      asrUrl: 'http://127.0.0.1:8031',
       voice: 'Serena',
       language: 'Chinese',
       asr: 'zh',
@@ -25,7 +26,7 @@ window.__ModuleLoader__.load({
       idle: '点一下开始，说话后停顿会自动发送',
       listening: '在听…', transcribing: '识别中…', thinking: '思考中…', speaking: '正在说…',
       interruptHint: '正在说…（直接说话可以打断）',
-      service: 'TTS 服务地址', voice: '音色', language: '语言', save: '保存', saved: '已保存',
+      service: 'TTS 服务地址', asrService: '识别服务地址', voice: '音色', language: '语言', save: '保存', saved: '已保存',
       tone: '语气（自然语言描述）', lowLatency: '低延迟模式（更跟手，但每 0.5 秒有一个接缝）',
       hint: '先在本机运行 tools/tts_server.py，再开始对话。',
       noSpeech: '语音识别服务不可用：请先在插件页启用语音输入（SenseVoice）。',
@@ -39,7 +40,7 @@ window.__ModuleLoader__.load({
       idle: 'Tap to start. Pause after speaking to send.',
       listening: 'Listening…', transcribing: 'Transcribing…', thinking: 'Thinking…', speaking: 'Speaking…',
       interruptHint: 'Speaking… (talk to interrupt)',
-      service: 'TTS endpoint', voice: 'Voice', language: 'Language', save: 'Save', saved: 'Saved',
+      service: 'TTS endpoint', asrService: 'ASR endpoint', voice: 'Voice', language: 'Language', save: 'Save', saved: 'Saved',
       tone: 'Tone (plain-language instruction)', lowLatency: 'Low latency (snappier, one seam every 0.5s)',
       hint: 'Start tools/tts_server.py locally before talking.',
       noSpeech: 'Speech recognition is unavailable: enable the voice input bundle (SenseVoice) first.',
@@ -190,6 +191,9 @@ window.__ModuleLoader__.load({
         idleTimer: null,
         bargeFrames: 0,
         echo: null,
+        hpX: 0,
+        hpY: 0,
+        cooldownUntil: 0,
         spokeThisTurn: false,
         suppress: false,
         cancelPending: null,
@@ -268,8 +272,20 @@ window.__ModuleLoader__.load({
         const frameMs = (frame.length / rate) * 1000;
         const playing = st.pendingCount > 0 || st.playing.length > 0;
 
+        // One-pole high-pass (~220 Hz) before measuring level: bumping the mic
+        // produces a low-frequency thump that speech never reaches.
         let sum = 0;
-        for (let i = 0; i < frame.length; i += 1) sum += frame[i] * frame[i];
+        let prevX = st.hpX;
+        let prevY = st.hpY;
+        for (let i = 0; i < frame.length; i += 1) {
+          const x = frame[i];
+          const y = 0.97 * (prevY + x - prevX);
+          prevX = x;
+          prevY = y;
+          sum += y * y;
+        }
+        st.hpX = prevX;
+        st.hpY = prevY;
         const rms = Math.sqrt(sum / frame.length);
 
         st.chunks.push(frame.slice(0));
@@ -299,16 +315,26 @@ window.__ModuleLoader__.load({
         }
         st.echo = null;
 
-        if (!st.speaking) st.noise = st.noise * 0.97 + rms * 0.03;
-        const threshold = Math.max(0.014, st.noise * 3.2);
-        const voiced = rms > threshold;
+        const now = window.performance.now();
+        const cooling = now < st.cooldownUntil;
+        if (cooling) st.voicedMs = 0;
+        if (!st.speaking && !cooling) {
+          // Drop fast, rise slowly: a noisy moment must not leave the gate high
+          // for seconds, or quiet syllables inside a sentence read as silence.
+          st.noise = rms < st.noise ? st.noise * 0.85 + rms * 0.15 : st.noise * 0.99 + rms * 0.01;
+        }
+        // The cap is the real guarantee: close-talk speech always exceeds it.
+        const threshold = Math.min(Math.max(0.011, st.noise * 3.2), 0.045);
+        // Right after our own audio stops, the mic still carries its tail; a
+        // gate that opens immediately turns that tail into a "user utterance".
+        const voiced = !cooling && rms > threshold;
 
         if (!st.speaking) trimPreroll();
 
         if (voiced) {
           st.voicedMs += frameMs;
           st.silentMs = 0;
-          if (!st.speaking && st.voicedMs >= 180) {
+          if (!st.speaking && !cooling && st.voicedMs >= 250) {
             st.speaking = true;
             cancelIfRunning();
           }
@@ -316,7 +342,7 @@ window.__ModuleLoader__.load({
           st.silentMs += frameMs;
         }
 
-        if (st.speaking && st.silentMs > 1100) {
+        if (st.speaking && st.silentMs > 2000) {
           const utterance = takeUtterance();
           if (utterance.length > rate * 0.7) {
             void handleUtterance(utterance);
@@ -532,6 +558,7 @@ window.__ModuleLoader__.load({
             return;
           }
           st.echo = null;
+          st.cooldownUntil = window.performance.now() + 600;
           status('listening');
         }, 220);
       }
@@ -613,21 +640,23 @@ window.__ModuleLoader__.load({
 
       // ---------- turn ----------
 
-      async function transcribe(base64Audio) {
-        const remote = cfg.runtime && cfg.runtime.remote;
-        if (!remote || !remote.speech) {
-          const error = new Error('speech service unavailable');
-          error.code = 'no-speech';
-          throw error;
+      async function transcribe(wavBytes) {
+        const settings = cfg.getSettings();
+        const endpoint =
+          String(settings.asrUrl || '').replace(/\/+$/, '') +
+          '/v1/audio/transcriptions?language=' +
+          encodeURIComponent(settings.asr || 'zh');
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'content-type': 'audio/wav' },
+          body: wavBytes,
+        });
+        if (!response.ok) {
+          const detail = await response.text().catch(() => '');
+          throw new Error((detail || 'ASR HTTP ' + response.status).slice(0, 180));
         }
-        const controller = new AbortController();
-        const result = await remote.speech.transcribe(
-          { audioBase64: base64Audio, language: cfg.getSettings().asr || 'zh' },
-          controller.signal,
-        );
-        if (!result) throw new Error('speech service unavailable');
-        if (result.ok === false) throw new Error(result.error && result.error.message ? result.error.message : 'transcribe failed');
-        return String((result.value && result.value.text) || '').trim();
+        const value = await response.json();
+        return String((value && value.text) || '').trim();
       }
 
       async function prompt(text) {
@@ -654,7 +683,7 @@ window.__ModuleLoader__.load({
         status('transcribing');
         try {
           const wav = encodeWav(downsample(samples, st.ac.sampleRate, 16000), 16000);
-          const text = await transcribe(base64(wav));
+          const text = await transcribe(wav);
           if (!text) {
             status('listening');
             cfg.emit.error(cfg.t('empty'));
@@ -964,6 +993,17 @@ window.__ModuleLoader__.load({
                     h(
                       'label',
                       null,
+                      t('asrService'),
+                      h('input', {
+                        type: 'url',
+                        value: settings.asrUrl,
+                        spellCheck: false,
+                        onChange: (event) => setSettings(Object.assign({}, settings, { asrUrl: event.target.value })),
+                      }),
+                    ),
+                    h(
+                      'label',
+                      null,
                       t('voice'),
                       h(
                         'select',
@@ -1064,7 +1104,7 @@ window.__ModuleLoader__.load({
     }
 
     return {
-      inject: ['slots', 'locale', 'remote.speech'],
+      inject: ['slots', 'locale'],
       apply,
     };
   },
